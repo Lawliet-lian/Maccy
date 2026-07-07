@@ -103,6 +103,13 @@ struct KeyHandlingView<Content: View>: View {
           appState.select()
           return .handled
         case .close:
+          /// 旧版预览是每条历史项自己的 popover。
+          /// 预览打开时，Esc 优先关闭预览并恢复到刚才的列表位置；
+          /// 只有在没有预览可关时，才继续执行原本的关闭窗口行为。
+          if appState.closePreviewAndRestoreLastHoveredSelection() {
+            return .handled
+          }
+
           appState.popup.close()
           return .handled
         default:

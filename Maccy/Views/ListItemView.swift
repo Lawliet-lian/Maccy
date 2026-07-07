@@ -63,11 +63,9 @@ struct ListItemView<Title: View>: View {
     .clipShape(.rect(cornerRadius: 4))
     .onHover { hovering in
       if hovering {
-        if !appState.isKeyboardNavigating {
-          appState.selectWithoutScrolling(id)
-        } else {
-          appState.hoverSelectionWhileKeyboardNavigating = id
-        }
+        /// 所有列表 hover 都统一通过 `AppState` 处理，
+        /// 这样历史项的“最近鼠标停留位置”与选中状态会保持同一份数据来源。
+        appState.handleHoverSelection(id)
       }
     }
     .help(help ?? "")

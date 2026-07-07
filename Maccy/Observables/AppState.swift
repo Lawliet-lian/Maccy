@@ -31,6 +31,9 @@ class AppState: Sendable {
     }
   }
 
+  /// 记录鼠标最近一次真正悬停到的历史记录项。
+  /// 手动关闭图片预览时，需要回到这里，方便继续沿着刚才的鼠标位置往后浏览。
+  var lastHoveredHistorySelection: UUID?
   var hoverSelectionWhileKeyboardNavigating: UUID?
   var isKeyboardNavigating: Bool = true {
     didSet {
@@ -39,6 +42,61 @@ class AppState: Sendable {
         selection = hoverSelection
       }
     }
+  }
+
+  /// 手动关闭预览并恢复列表选中时，需要跳过下一次“选中即自动预览”。
+  /// 否则刚刚关闭的预览会因为重新选中同一项而立刻再次弹出。
+  private var suppressPreviewAutoOpenOnNextSelection = false
+
+  /// 统一处理列表 hover：
+  /// 1. 历史记录项需要额外记录“鼠标最近停留位置”；
+  /// 2. 鼠标导航时立即切换选中；
+  /// 3. 键盘导航时只暂存，等切回鼠标导航后再应用。
+  func handleHoverSelection(_ id: UUID) {
+    if history.items.contains(where: { $0.id == id }) {
+      lastHoveredHistorySelection = id
+    }
+
+    if !isKeyboardNavigating {
+      selectWithoutScrolling(id)
+    } else {
+      hoverSelectionWhileKeyboardNavigating = id
+    }
+  }
+
+  /// 供 `HistoryItemDecorator` 在选中切换时查询：
+  /// 如果这里返回 `true`，说明这次选中是为了恢复列表位置，不应该自动重新打开预览。
+  func consumePreviewAutoOpenSuppression() -> Bool {
+    if suppressPreviewAutoOpenOnNextSelection {
+      suppressPreviewAutoOpenOnNextSelection = false
+      return true
+    }
+
+    return false
+  }
+
+  /// 预览打开时，Esc 应优先关闭预览，而不是直接关闭整个窗口。
+  /// 如果之前是鼠标 hover 触发的预览，则关闭后恢复到鼠标最近一次停留的历史项。
+  @discardableResult
+  func closePreviewAndRestoreLastHoveredSelection() -> Bool {
+    guard let selectedItem = history.selectedItem,
+          selectedItem.showPreview else {
+      return false
+    }
+
+    HistoryItemDecorator.previewThrottler.cancel()
+    selectedItem.showPreview = false
+
+    guard let hoveredSelection = lastHoveredHistorySelection,
+          history.items.contains(where: { $0.id == hoveredSelection && $0.isVisible }) else {
+      return true
+    }
+
+    hoverSelectionWhileKeyboardNavigating = nil
+    suppressPreviewAutoOpenOnNextSelection = true
+    isKeyboardNavigating = false
+    selection = hoveredSelection
+    return true
   }
 
   var searchVisible: Bool {

@@ -23,9 +23,15 @@ class HistoryItemDecorator: Identifiable, Hashable {
   var isSelected: Bool = false {
     didSet {
       if isSelected {
-        Self.previewThrottler.throttle {
-          Self.previewThrottler.minimumDelay = 0.2
-          self.showPreview = true
+        /// 手动按 Esc 关闭预览后，恢复列表选中时不能立刻再次弹出预览。
+        /// 这里消费一次性抑制标记，仅跳过这一次自动预览。
+        if AppState.shared.consumePreviewAutoOpenSuppression() {
+          showPreview = false
+        } else {
+          Self.previewThrottler.throttle {
+            Self.previewThrottler.minimumDelay = 0.2
+            self.showPreview = true
+          }
         }
       } else {
         Self.previewThrottler.cancel()
