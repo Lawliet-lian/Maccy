@@ -47,6 +47,23 @@ Download the latest version from the [releases](https://github.com/p0deje/Maccy/
 brew install maccy
 ```
 
+## Packaging
+
+To build a local DMG package, use the helper script from the repository root:
+
+```sh
+./scripts/package-dmg.sh
+```
+
+Useful variants:
+
+```sh
+./scripts/package-dmg.sh --configuration Release
+./scripts/package-dmg.sh --app ~/Library/Developer/Xcode/DerivedData/Maccy-ekwfvrtknmbqragfkkmohhjdiwib/Build/Products/Debug/Maccy.app
+```
+
+The generated DMG is written to `./dist`.
+
 ## Usage
 
 1. <kbd>SHIFT (⇧)</kbd> + <kbd>COMMAND (⌘)</kbd> + <kbd>C</kbd> to popup Maccy or click on its icon in the menu bar.
