@@ -68,21 +68,37 @@ class AppState: Sendable {
   /// 2. 鼠标导航时立即切换选中；
   /// 3. 键盘导航时只暂存，等切回鼠标导航后再应用。
   func handleHoverSelection(_ id: UUID, hovering: Bool) {
-    guard history.items.contains(where: { $0.id == id }) else {
+    if history.items.contains(where: { $0.id == id }) {
+      if hovering {
+        lastHoveredHistorySelection = id
+        currentHoveredHistorySelection = id
+
+        if !isKeyboardNavigating {
+          selectWithoutScrolling(id)
+        } else {
+          hoverSelectionWhileKeyboardNavigating = id
+        }
+      } else if currentHoveredHistorySelection == id {
+        currentHoveredHistorySelection = nil
+      }
+
+      return
+    }
+
+    guard footer.items.contains(where: { $0.id == id }) else {
       return
     }
 
     if hovering {
-      lastHoveredHistorySelection = id
-      currentHoveredHistorySelection = id
+      /// 鼠标进入 footer 时，说明当前不再是“历史项鼠标选中”语境，
+      /// 需要清掉历史 hover 标记，避免影响回车对搜索框的判断。
+      currentHoveredHistorySelection = nil
 
       if !isKeyboardNavigating {
         selectWithoutScrolling(id)
       } else {
         hoverSelectionWhileKeyboardNavigating = id
       }
-    } else if currentHoveredHistorySelection == id {
-      currentHoveredHistorySelection = nil
     }
   }
 
