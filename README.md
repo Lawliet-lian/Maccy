@@ -47,6 +47,8 @@ Download the latest version from the [releases](https://github.com/p0deje/Maccy/
 brew install maccy
 ```
 
+If automatic paste stops working after replacing an existing installation, open macOS `Privacy & Security` -> `Accessibility`, remove the existing `Maccy` permission entry, and then add the current `Maccy.app` again manually.
+
 ## Packaging
 
 To build a local DMG package, use the helper script from the repository root:
