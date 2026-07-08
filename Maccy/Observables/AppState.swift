@@ -38,6 +38,12 @@ class AppState: Sendable {
   /// 记录鼠标最近一次真正悬停到的历史记录项。
   /// 手动关闭图片预览时，需要回到这里，方便继续沿着刚才的鼠标位置往后浏览。
   var lastHoveredHistorySelection: UUID?
+  /// 记录鼠标当前正停留在哪一条历史项上。
+  /// 这个状态和 `lastHoveredHistorySelection` 不同：
+  /// - `lastHoveredHistorySelection` 用来做“关闭预览后回到上一次位置”
+  /// - `currentHoveredHistorySelection` 用来判断“现在是不是鼠标明确选中了某条历史项”
+  ///   这样搜索框按回车时，就不会因为默认高亮了第一条结果而误触发复制。
+  var currentHoveredHistorySelection: UUID?
   var hoverSelectionWhileKeyboardNavigating: UUID?
   var isKeyboardNavigating: Bool = true {
     didSet {
@@ -58,18 +64,25 @@ class AppState: Sendable {
   private var fullImagePreviewSelection: UUID?
 
   /// 统一处理列表 hover：
-  /// 1. 历史记录项需要额外记录“鼠标最近停留位置”；
+  /// 1. 历史记录项需要额外记录“鼠标最近停留位置”和“当前是否真的还停在这条上”；
   /// 2. 鼠标导航时立即切换选中；
   /// 3. 键盘导航时只暂存，等切回鼠标导航后再应用。
-  func handleHoverSelection(_ id: UUID) {
-    if history.items.contains(where: { $0.id == id }) {
-      lastHoveredHistorySelection = id
+  func handleHoverSelection(_ id: UUID, hovering: Bool) {
+    guard history.items.contains(where: { $0.id == id }) else {
+      return
     }
 
-    if !isKeyboardNavigating {
-      selectWithoutScrolling(id)
-    } else {
-      hoverSelectionWhileKeyboardNavigating = id
+    if hovering {
+      lastHoveredHistorySelection = id
+      currentHoveredHistorySelection = id
+
+      if !isKeyboardNavigating {
+        selectWithoutScrolling(id)
+      } else {
+        hoverSelectionWhileKeyboardNavigating = id
+      }
+    } else if currentHoveredHistorySelection == id {
+      currentHoveredHistorySelection = nil
     }
   }
 
@@ -88,6 +101,28 @@ class AppState: Sendable {
   /// 仅图片项会进入这个模式，文本项始终返回 false。
   func isShowingFullImagePreview(for item: HistoryItemDecorator) -> Bool {
     fullImagePreviewSelection == item.id
+  }
+
+  /// 只有在鼠标当前明确停在某条历史项上时，才把回车解释成“选择当前历史项”。
+  /// 这样搜索框获得焦点时，默认高亮的第一条结果不会被误当成用户真的想选中的项。
+  private var hasExplicitMouseHistorySelection: Bool {
+    guard !isKeyboardNavigating,
+          let selectedItem = history.selectedItem else {
+      return false
+    }
+
+    return currentHoveredHistorySelection == selectedItem.id
+  }
+
+  /// 搜索框获得焦点时，回车是否应该执行“复制并关闭列表”。
+  /// - 鼠标当前明确停在某条历史项上：允许回车直接选择这条记录。
+  /// - 否则：把回车留给搜索输入本身，不触发列表选择。
+  func shouldHandleReturn(searchFocused: Bool) -> Bool {
+    guard searchFocused else {
+      return true
+    }
+
+    return hasExplicitMouseHistorySelection
   }
 
   /// 鼠标停在图片项上时，空格键作为“预览开关”使用：

@@ -62,11 +62,11 @@ struct ListItemView<Title: View>: View {
     .background(isSelected ? Color.accentColor.opacity(0.8) : .clear)
     .clipShape(.rect(cornerRadius: 4))
     .onHover { hovering in
-      if hovering {
-        /// 所有列表 hover 都统一通过 `AppState` 处理，
-        /// 这样历史项的“最近鼠标停留位置”与选中状态会保持同一份数据来源。
-        appState.handleHoverSelection(id)
-      }
+      /// 所有列表 hover 都统一通过 `AppState` 处理，
+      /// 这样既能记住“最近一次鼠标停留位置”，
+      /// 也能区分“鼠标当前还在不在这条历史项上”，
+      /// 让回车键只在真正的鼠标选中状态下执行复制关闭。
+      appState.handleHoverSelection(id, hovering: hovering)
     }
     .help(help ?? "")
   }

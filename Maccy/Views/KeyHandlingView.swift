@@ -108,6 +108,13 @@ struct KeyHandlingView<Content: View>: View {
 
           return .ignored
         case .selectCurrentItem:
+          /// 搜索框有焦点时，只在鼠标当前明确选中了一条历史项的情况下，
+          /// 才把回车当成“选择当前历史项”。
+          /// 否则把回车留给搜索框自身，避免默认高亮首项被误触发。
+          guard appState.shouldHandleReturn(searchFocused: searchFocused) else {
+            return .ignored
+          }
+
           appState.select()
           return .handled
         case .close:

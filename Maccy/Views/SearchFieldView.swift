@@ -24,7 +24,11 @@ struct SearchFieldView: View {
           .lineLimit(1)
           .textFieldStyle(.plain)
           .onSubmit {
-            appState.select()
+            /// 搜索框内回车只在“鼠标当前明确选中了一条历史项”时才执行复制关闭。
+            /// 否则保留搜索输入上下文，不把默认高亮的首条结果误当成用户确认选择。
+            if appState.shouldHandleReturn(searchFocused: true) {
+              appState.select()
+            }
           }
 
         if !query.isEmpty {
