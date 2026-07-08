@@ -32,6 +32,7 @@ enum KeyChord: CaseIterable {
   case pinOrUnpin
   case selectCurrentItem
   case close
+  case toggleImageOriginalPreview
   case unknown
 
   init(_ event: NSEvent?) {
@@ -85,6 +86,8 @@ enum KeyChord: CaseIterable {
       self = .pinOrUnpin
     case (.comma, [.command]):
       self = .openPreferences
+    case (.space, []):
+      self = .toggleImageOriginalPreview
     case (.return, _),
          (.keypadEnter, _):
       self = .selectCurrentItem

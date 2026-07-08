@@ -99,6 +99,14 @@ struct KeyHandlingView<Content: View>: View {
         case .pinOrUnpin:
           appState.history.togglePin(appState.history.selectedItem)
           return .handled
+        case .toggleImageOriginalPreview:
+          /// 只在当前选中项是图片时接管空格键。
+          /// 这样既能实现“空格切换原图预览”，又不会影响普通文本搜索输入空格。
+          if appState.toggleFullImagePreviewForSelectedItem() {
+            return .handled
+          }
+
+          return .ignored
         case .selectCurrentItem:
           appState.select()
           return .handled

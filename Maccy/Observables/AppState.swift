@@ -21,6 +21,10 @@ class AppState: Sendable {
   }
 
   func selectWithoutScrolling(_ item: UUID?) {
+    if history.selectedItem?.id != item {
+      fullImagePreviewSelection = nil
+    }
+
     history.selectedItem = nil
     footer.selectedItem = nil
 
@@ -47,6 +51,11 @@ class AppState: Sendable {
   /// 手动关闭预览并恢复列表选中时，需要跳过下一次“选中即自动预览”。
   /// 否则刚刚关闭的预览会因为重新选中同一项而立刻再次弹出。
   private var suppressPreviewAutoOpenOnNextSelection = false
+  /// 记录当前是否处于“原图 1:1 预览”模式。
+  /// 这里不直接保存 Bool，而是记录正在以原图模式展示的历史项 id，
+  /// 这样视图层可以精确判断“当前这条记录是否应该以原图模式渲染”，
+  /// 并且在切换选中项时可以顺手把原图模式一起清掉，避免状态残留到别的记录上。
+  private var fullImagePreviewSelection: UUID?
 
   /// 统一处理列表 hover：
   /// 1. 历史记录项需要额外记录“鼠标最近停留位置”；
@@ -75,6 +84,33 @@ class AppState: Sendable {
     return false
   }
 
+  /// 当前这条历史记录是否正以“原图 1:1”模式显示。
+  /// 仅图片项会进入这个模式，文本项始终返回 false。
+  func isShowingFullImagePreview(for item: HistoryItemDecorator) -> Bool {
+    fullImagePreviewSelection == item.id
+  }
+
+  /// 鼠标停在图片项上时，空格键作为“预览开关”使用：
+  /// - 如果当前图片预览已经打开，不管是不是原图模式，空格都直接关闭预览并恢复列表位置。
+  /// - 如果当前没有打开预览，空格会立即打开原图 1:1 预览。
+  /// - 非图片项：返回 false，让空格继续走默认输入行为，不干扰搜索框录入空格。
+  @discardableResult
+  func toggleFullImagePreviewForSelectedItem() -> Bool {
+    guard let selectedItem = history.selectedItem,
+          selectedItem.item.image != nil else {
+      return false
+    }
+
+    if selectedItem.showPreview {
+      return closePreviewAndRestoreLastHoveredSelection()
+    }
+
+    HistoryItemDecorator.previewThrottler.cancel()
+    fullImagePreviewSelection = selectedItem.id
+    selectedItem.showPreview = true
+    return true
+  }
+
   /// 预览打开时，Esc 应优先关闭预览，而不是直接关闭整个窗口。
   /// 如果之前是鼠标 hover 触发的预览，则关闭后恢复到鼠标最近一次停留的历史项。
   @discardableResult
@@ -85,6 +121,7 @@ class AppState: Sendable {
     }
 
     HistoryItemDecorator.previewThrottler.cancel()
+    fullImagePreviewSelection = nil
     selectedItem.showPreview = false
 
     guard let hoveredSelection = lastHoveredHistorySelection,
