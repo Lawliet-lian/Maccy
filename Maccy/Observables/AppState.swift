@@ -128,12 +128,12 @@ class AppState: Sendable {
 
   /// 鼠标停在图片项上时，空格键作为“预览开关”使用：
   /// - 如果当前图片预览已经打开，不管是不是原图模式，空格都直接关闭预览并恢复列表位置。
-  /// - 如果当前没有打开预览，空格会立即打开原图 1:1 预览。
+  /// - 如果当前没有打开预览，空格会立即打开与悬停相同的图片预览。
   /// - 非图片项：返回 false，让空格继续走默认输入行为，不干扰搜索框录入空格。
   @discardableResult
   func toggleFullImagePreviewForSelectedItem() -> Bool {
     guard let selectedItem = history.selectedItem,
-          selectedItem.item.image != nil else {
+          selectedItem.previewImage != nil || selectedItem.thumbnailImage != nil || selectedItem.item.image != nil else {
       return false
     }
 

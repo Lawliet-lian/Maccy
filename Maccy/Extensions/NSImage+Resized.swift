@@ -3,15 +3,9 @@ import AppKit.NSImage
 // Based on https://stackoverflow.com/questions/73062803/resizing-nsimage-keeping-aspect-ratio-reducing-the-image-size-while-trying-to-sc.
 extension NSImage {
   func resized(to newSize: NSSize) -> NSImage {
-    let ratioX = newSize.width / size.width
-    let ratioY = newSize.height / size.height
-    let ratio = ratioX < ratioY ? ratioX : ratioY
-    let newHeight = size.height * ratio
-    let newWidth = size.width * ratio
-    let newSize = NSSize(width: newWidth, height: newHeight)
-
-    // Don't attempt to size up.
-    if newSize.height >= size.height {
+    guard size.width > 0, size.height > 0 else { return self }
+    let newSize = size.fitted(within: newSize)
+    if newSize == size {
       return self
     }
 
@@ -23,5 +17,12 @@ extension NSImage {
 
       return true
     }
+  }
+}
+
+extension NSSize {
+  func fitted(within bounds: NSSize) -> NSSize {
+    let scale = min(1, bounds.width / width, bounds.height / height)
+    return NSSize(width: width * scale, height: height * scale)
   }
 }

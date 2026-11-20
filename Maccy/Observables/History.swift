@@ -95,20 +95,13 @@ class History { // swiftlint:disable:this type_body_length
         }
       }
     }
-
-    Task {
-      for await _ in Defaults.updates(.imageMaxHeight, initial: false) {
-        for item in items {
-          await item.sizeImages()
-        }
-      }
-    }
   }
 
   @MainActor
   func load() async throws {
     let descriptor = FetchDescriptor<HistoryItem>()
     let results = try Storage.shared.context.fetch(descriptor)
+    selectedItem = nil
     all = sorter.sort(results).map { HistoryItemDecorator($0) }
     items = all
 
@@ -122,14 +115,12 @@ class History { // swiftlint:disable:this type_body_length
   @discardableResult
   @MainActor
   func add(_ item: HistoryItem) -> HistoryItemDecorator {
-    while all.filter(\.isUnpinned).count >= Defaults[.size] {
-      delete(all.last(where: \.isUnpinned))
-    }
-
     var removedItemIndex: Int?
     if let existingHistoryItem = findSimilarItem(item) {
       if isModified(item) == nil {
+        deleteContents(of: item)
         item.contents = existingHistoryItem.contents
+        existingHistoryItem.contents = []
       }
       item.firstCopiedAt = existingHistoryItem.firstCopiedAt
       item.numberOfCopies += existingHistoryItem.numberOfCopies
@@ -138,11 +129,14 @@ class History { // swiftlint:disable:this type_body_length
       if !item.fromMaccy {
         item.application = existingHistoryItem.application
       }
-      Storage.shared.context.delete(existingHistoryItem)
       removedItemIndex = all.firstIndex(where: { $0.item == existingHistoryItem })
       if let removedItemIndex {
+        if selectedItem === all[removedItemIndex] {
+          selectedItem = nil
+        }
         all.remove(at: removedItemIndex)
       }
+      removeFromStorage(existingHistoryItem)
     } else {
       Task {
         Notifier.notify(body: item.title, sound: .write)
@@ -155,33 +149,34 @@ class History { // swiftlint:disable:this type_body_length
     if let pin = item.pin {
       itemDecorator = HistoryItemDecorator(item, shortcuts: KeyShortcut.create(character: pin))
       // Keep pins in the same place.
-      if let removedItemIndex {
-        all.insert(itemDecorator, at: removedItemIndex)
-      }
+      all.insert(itemDecorator, at: removedItemIndex ?? 0)
     } else {
+      while all.filter(\.isUnpinned).count >= Defaults[.size] {
+        delete(all.last(where: \.isUnpinned))
+      }
       itemDecorator = HistoryItemDecorator(item)
 
       let sortedItems = sorter.sort(all.map(\.item) + [item])
       if let index = sortedItems.firstIndex(of: item) {
         all.insert(itemDecorator, at: index)
       }
-
-      items = all
-      updateUnpinnedShortcuts()
-      AppState.shared.popup.needsResize = true
     }
 
+    items = all
+    updateUnpinnedShortcuts()
+    AppState.shared.popup.needsResize = true
     return itemDecorator
   }
 
   @MainActor
   func clear() {
+    let descriptor = FetchDescriptor<HistoryItem>(predicate: #Predicate { $0.pin == nil })
+    guard let entries = try? Storage.shared.context.fetch(descriptor) else { return }
+    if selectedItem?.isUnpinned == true { selectedItem = nil }
+    sessionLog = sessionLog.filter { $0.value.pin != nil }
+    entries.forEach { deleteFromStorage($0) }
     all.removeAll(where: \.isUnpinned)
     items = all
-    try? Storage.shared.context.delete(
-      model: HistoryItem.self,
-      where: #Predicate { $0.pin == nil }
-    )
     Clipboard.shared.clear()
     AppState.shared.popup.close()
     Task {
@@ -191,9 +186,12 @@ class History { // swiftlint:disable:this type_body_length
 
   @MainActor
   func clearAll() {
+    guard let entries = try? Storage.shared.context.fetch(FetchDescriptor<HistoryItem>()) else { return }
+    selectedItem = nil
+    sessionLog.removeAll()
+    entries.forEach { deleteFromStorage($0) }
     all.removeAll()
     items = all
-    try? Storage.shared.context.delete(model: HistoryItem.self)
     Clipboard.shared.clear()
     AppState.shared.popup.close()
     Task {
@@ -205,7 +203,8 @@ class History { // swiftlint:disable:this type_body_length
   func delete(_ item: HistoryItemDecorator?) {
     guard let item else { return }
 
-    Storage.shared.context.delete(item.item)
+    if selectedItem === item { selectedItem = nil }
+    removeFromStorage(item.item)
     all.removeAll { $0 == item }
     items.removeAll { $0 == item }
 
@@ -213,6 +212,25 @@ class History { // swiftlint:disable:this type_body_length
     Task {
       AppState.shared.popup.needsResize = true
     }
+  }
+
+  @MainActor
+  private func removeFromStorage(_ item: HistoryItem) {
+    sessionLog = sessionLog.filter { $0.value !== item }
+    deleteFromStorage(item)
+  }
+
+  @MainActor
+  private func deleteFromStorage(_ item: HistoryItem) {
+    deleteContents(of: item)
+    Storage.shared.context.delete(item)
+  }
+
+  @MainActor
+  private func deleteContents(of item: HistoryItem) {
+    let contents = item.contents
+    item.contents = []
+    contents.forEach { Storage.shared.context.delete($0) }
   }
 
   @MainActor
@@ -288,15 +306,12 @@ class History { // swiftlint:disable:this type_body_length
       }
     }
 
-    return item
+    return isModified(item)
   }
 
   private func isModified(_ item: HistoryItem) -> HistoryItem? {
-    if let modified = item.modified, sessionLog.keys.contains(modified) {
-      return sessionLog[modified]
-    }
-
-    return nil
+    guard let modified = item.modified else { return nil }
+    return sessionLog[modified]
   }
 
   private func updateItems(_ newItems: [Search.SearchResult]) {
@@ -307,6 +322,9 @@ class History { // swiftlint:disable:this type_body_length
       return item
     }
 
+    if let selectedItem, !items.contains(selectedItem) {
+      self.selectedItem = nil
+    }
     updateUnpinnedShortcuts()
   }
 

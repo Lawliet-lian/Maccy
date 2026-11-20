@@ -1,6 +1,7 @@
 import AppKit.NSWorkspace
 import Defaults
 import Foundation
+import ImageIO
 import Observation
 import Sauce
 
@@ -28,9 +29,9 @@ class HistoryItemDecorator: Identifiable, Hashable {
         if AppState.shared.consumePreviewAutoOpenSuppression() {
           showPreview = false
         } else {
-          Self.previewThrottler.throttle {
+          Self.previewThrottler.throttle { [weak self] in
             Self.previewThrottler.minimumDelay = 0.2
-            self.showPreview = true
+            self?.showPreview = true
           }
         }
       } else {
@@ -40,7 +41,12 @@ class HistoryItemDecorator: Identifiable, Hashable {
     }
   }
   var shortcuts: [KeyShortcut] = []
-  var showPreview: Bool = false
+  var showPreview = false {
+    didSet {
+      guard oldValue != showPreview else { return }
+      previewImage = showPreview ? item.image?.resized(to: Self.previewImageSize) : nil
+    }
+  }
 
   var application: String? {
     if item.universalClipboard {
@@ -56,8 +62,9 @@ class HistoryItemDecorator: Identifiable, Hashable {
     return url.deletingPathExtension().lastPathComponent
   }
 
-  var previewImage: NSImage?
-  var thumbnailImage: NSImage?
+  private(set) var previewImage: NSImage?
+  private(set) var thumbnailImage: NSImage?
+  @ObservationIgnored private var lastThumbnailSize: NSSize?
   var applicationImage: ApplicationImage
 
   // 10k characters seems to be more than enough on large displays
@@ -82,19 +89,29 @@ class HistoryItemDecorator: Identifiable, Hashable {
 
     synchronizeItemPin()
     synchronizeItemTitle()
-    Task {
-      await sizeImages()
-    }
   }
 
   @MainActor
-  func sizeImages() {
-    guard let image = item.image else {
-      return
-    }
+  func loadThumbnail() {
+    let bounds = Self.thumbnailImageSize
+    guard lastThumbnailSize != bounds else { return }
+    lastThumbnailSize = bounds
 
-    previewImage = image.resized(to: HistoryItemDecorator.previewImageSize)
-    thumbnailImage = image.resized(to: HistoryItemDecorator.thumbnailImageSize)
+    thumbnailImage = nil
+    guard let data = item.imageData,
+          let image = NSImage(data: data),
+          image.size.width > 0, image.size.height > 0,
+          let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
+
+    let size = image.size.fitted(within: bounds)
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: Int(ceil(max(size.width, size.height) * 2))
+    ]
+    if let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+      thumbnailImage = NSImage(cgImage: thumbnail, size: size)
+    }
   }
 
   func highlight(_ query: String, _ ranges: [Range<String.Index>]) {
@@ -137,8 +154,9 @@ class HistoryItemDecorator: Identifiable, Hashable {
   private func synchronizeItemPin() {
     _ = withObservationTracking {
       item.pin
-    } onChange: {
-      DispatchQueue.main.async {
+    } onChange: { [weak self] in
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
         if let pin = self.item.pin {
           self.shortcuts = KeyShortcut.create(character: pin)
         }
@@ -150,8 +168,9 @@ class HistoryItemDecorator: Identifiable, Hashable {
   private func synchronizeItemTitle() {
     _ = withObservationTracking {
       item.title
-    } onChange: {
-      DispatchQueue.main.async {
+    } onChange: { [weak self] in
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
         self.title = self.item.title
         self.synchronizeItemTitle()
       }

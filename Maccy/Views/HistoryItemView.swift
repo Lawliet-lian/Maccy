@@ -5,6 +5,7 @@ struct HistoryItemView: View {
   @Bindable var item: HistoryItemDecorator
 
   @Environment(AppState.self) private var appState
+  @Default(.imageMaxHeight) private var imageMaxHeight
 
   var body: some View {
     ListItemView(
@@ -19,6 +20,13 @@ struct HistoryItemView: View {
     }
     .onTapGesture {
       appState.history.select(item)
+    }
+    .task(id: imageMaxHeight) {
+      let previousSize = item.thumbnailImage?.size
+      item.loadThumbnail()
+      if previousSize != item.thumbnailImage?.size {
+        appState.popup.needsResize = true
+      }
     }
     .popover(isPresented: $item.showPreview, arrowEdge: .trailing) {
       PreviewItemView(item: item)

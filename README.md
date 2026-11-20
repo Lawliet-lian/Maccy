@@ -66,6 +66,8 @@ Useful variants:
 
 The generated DMG is written to `./dist`.
 
+For local signing, replacement, and history verification, see the [打包与安装说明](PACKAGING.md).
+
 ## Usage
 
 1. <kbd>SHIFT (⇧)</kbd> + <kbd>COMMAND (⌘)</kbd> + <kbd>C</kbd> to popup Maccy or click on its icon in the menu bar.

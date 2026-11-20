@@ -71,6 +71,7 @@ struct HistoryListView: View {
             appState.isKeyboardNavigating = true
             appState.selection = appState.history.unpinnedItems.first?.id ?? appState.history.pinnedItems.first?.id
           } else {
+            appState.history.selectedItem = nil
             modifierFlags.flags = []
             appState.isKeyboardNavigating = true
           }

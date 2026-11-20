@@ -1,6 +1,5 @@
 import Defaults
 import KeyboardShortcuts
-import Sparkle
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -24,16 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   private var statusItemVisibilityObserver: NSKeyValueObservation?
 
   func applicationWillFinishLaunching(_ notification: Notification) { // swiftlint:disable:this function_body_length
-    #if DEBUG
-    if CommandLine.arguments.contains("enable-testing") {
-      SPUUpdater(hostBundle: Bundle.main,
-                 applicationBundle: Bundle.main,
-                 userDriver: SPUStandardUserDriver(hostBundle: Bundle.main, delegate: nil),
-                 delegate: nil)
-      .automaticallyChecksForUpdates = false
-    }
-    #endif
-
     // Bridge FloatingPanel via AppDelegate.
     AppState.shared.appDelegate = self
 
@@ -98,6 +87,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
       statusBarButton: statusItem.button
     ) {
       ContentView()
+    }
+
+    let orphanCleanup = "cleanup-orphaned-history-contents"
+    if Defaults[.migrations][orphanCleanup] != true, !CommandLine.arguments.contains("enable-testing") {
+      Task {
+        do {
+          try await Storage.shared.cleanupOrphanedContents()
+          Defaults[.migrations][orphanCleanup] = true
+        } catch {
+          NSLog("Maccy could not clean up orphaned history contents: %@", String(describing: error))
+        }
+      }
     }
   }
 
